@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>2025 Convective Storms: Damage & Frequency </title>
+  <script src="https://d3js.org/d3.v3.min.js"></script>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 30px;
+      background: #f9f9f9;
+    }
+
+    h1 {
+      margin-bottom: 4px;
+    }
+
+    p.subtitle {
+      color: #555;
+      margin-top: 0;
+      margin-bottom: 20px;
+    }
+
+    .controls {
+      margin-bottom: 24px;
+    }
+
+    .controls label {
+      font-weight: bold;
+      margin-right: 8px;
+    }
+
+    .controls select,
+    .controls button {
+      font-size: 14px;
+      padding: 5px 10px;
+      margin-right: 10px;
+      cursor: pointer;
+    }
+
+    .charts {
+      display: flex;
+      gap: 40px;
+      flex-wrap: wrap;
+    }
+
+    .chart-box {
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 16px;
+    }
+
+    .chart-box h2 {
+      margin-top: 0;
+      font-size: 15px;
+      color: #333;
+    }
+
+    .axis path,
+    .axis line {
+      fill: none;
+      stroke: #999;
+      shape-rendering: crispEdges;
+    }
+
+    .axis text {
+      font-size: 11px;
+    }
+
+    .bar {
+      fill: steelblue;
+      cursor: pointer;
+    }
+
+    .bar:hover {
+      fill: #e07b00;
+    }
+
+    .bar.highlighted {
+      fill: #e07b00;
+    }
+
+    .bar.dimmed {
+      fill: #ccc;
+    }
+
+    .axis-label {
+      font-size: 12px;
+      fill: #555;
+    }
+
+    #tooltip {
+      position: fixed;
+      background: rgba(0,0,0,0.75);
+      color: white;
+      padding: 8px 12px;
+      border-radius: 4px;
+      font-size: 13px;
+      pointer-events: none;
+      display: none;
+    }
+  </style>
+</head>
+
+<body>
+
+<p style="margin-top:0;"><a href="documentation.html">Click Here To View Documentation</a></p>
+
+<h1>2025 Convective Storms: Damage & Frequency</h1>
+<p class="subtitle">Explore storm frequency and property damage by event type. Filter by season using the dropdown.</p>
+
+<div class="controls">
+  <label for="seasonFilter">Filter by Season:</label>
+  <select id="seasonFilter">
+    <option value="All">All Seasons</option>
+    <option value="Winter">Winter</option>
+    <option value="Spring">Spring</option>
+    <option value="Summer">Summer</option>
+    <option value="Fall">Fall</option>
+  </select>
+
+  <button id="sortCount">Sort by Count</button>
+  <button id="sortDamage">Sort by Damage</button>
+  <button id="resetBtn">Reset</button>
+</div>
+
+<div class="charts">
+  <div class="chart-box">
+    <h2>Number of Events by Type</h2>
+    <div id="countChart"></div>
+  </div>
+  <div class="chart-box">
+    <h2>Total Property Damage by Type (in $Millions)</h2>
+    <div id="damageChart"></div>
+  </div>
+</div>
+
+<div id="tooltip"></div>
+
+<script>
+
+// ================================
+// Dimensions
+// ================================
+
+var margin = { top: 20, right: 20, bottom: 110, left: 70 },
+    width  = 480 - margin.left - margin.right,
+    height = 380 - margin.top  - margin.bottom;
+
+// ================================
+// SVG setup: Count chart
+// ================================
+
+var svgCount = d3.select("#countChart")
+  .append("svg")
+  .attr("width",  width  + margin.left + margin.right)
+  .attr("height", height + margin.top  + margin.bottom)
+  .append("g")
+  .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+// ================================
+// SVG setup: Damage chart
+// ================================
+
+var svgDamage = d3.select("#damageChart")
+  .append("svg")
+  .attr("width",  width  + margin.left + margin.right)
+  .attr("height", height + margin.top  + margin.bottom)
+  .append("g")
+  .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+// ================================
+// Scales
+// ================================
+
+var xCount  = d3.scale.ordinal().rangeRoundBands([0, width], 0.2);
+var yCount  = d3.scale.linear().range([height, 0]);
+
+var xDamage = d3.scale.ordinal().rangeRoundBands([0, width], 0.2);
+var yDamage = d3.scale.linear().range([height, 0]);
+
+// ================================
+// Axes
+// ================================
+
+var xAxisCount = d3.svg.axis().scale(xCount).orient("bottom");
+var yAxisCount = d3.svg.axis().scale(yCount).orient("left").ticks(6);
+
+var xAxisDamage = d3.svg.axis().scale(xDamage).orient("bottom");
+var yAxisDamage = d3.svg.axis().scale(yDamage).orient("left").ticks(6);
+
+// Append axis groups
+var xAxisCountGroup = svgCount.append("g")
+  .attr("class", "axis")
+  .attr("transform", "translate(0," + height + ")");
+
+var yAxisCountGroup = svgCount.append("g")
+  .attr("class", "axis");
+
+var xAxisDamageGroup = svgDamage.append("g")
+  .attr("class", "axis")
+  .attr("transform", "translate(0," + height + ")");
+
+var yAxisDamageGroup = svgDamage.append("g")
+  .attr("class", "axis");
+
+// Y-axis labels
+svgCount.append("text")
+  .attr("class", "axis-label")
+  .attr("transform", "rotate(-90)")
+  .attr("x", -height / 2)
+  .attr("y", -55)
+  .style("text-anchor", "middle")
+  .text("Number of Events");
+
+svgDamage.append("text")
+  .attr("class", "axis-label")
+  .attr("transform", "rotate(-90)")
+  .attr("x", -height / 2)
+  .attr("y", -55)
+  .style("text-anchor", "middle")
+  .text("Damage ($ Millions)");
+
+// ================================
+// Global state
+// ================================
+
+var allData       = [];
+var currentFilter = "All";
+var currentSort   = "alpha";  // "alpha", "count", or "damage"
+var highlighted   = null;
+var tooltip       = d3.select("#tooltip");
+
+// ================================
+// Load data
+// ================================
+
+d3.csv("storm_data.csv", function(error, data) {
+  if (error) throw error;
+
+  data.forEach(function(d) {
+    d.INJURIES_TOTAL    = +d.INJURIES_TOTAL;
+    d.DEATHS_TOTAL      = +d.DEATHS_TOTAL;
+    d.DAMAGE_TOTAL_USD  = +d.DAMAGE_TOTAL_USD;
+  });
+
+  allData = data;
+
+  attachEvents();
+  update();
+});
+
+// ================================
+// Build summary data
+// ================================
+
+function buildSummary(data) {
+  var nested = d3.nest()
+    .key(function(d) { return d.EVENT_TYPE; })
+    .rollup(function(v) {
+      return {
+        count:  v.length,
+        damage: d3.sum(v, function(d) { return d.DAMAGE_TOTAL_USD; }) / 1e6
+      };
+    })
+    .entries(data);
+
+  return nested.map(function(d) {
+    return {
+      type:   d.key,
+      count:  d.values.count,
+      damage: d.values.damage
+    };
+  });
+}
+
+// ================================
+// Controls
+// ================================
+
+function attachEvents() {
+
+  d3.select("#seasonFilter").on("change", function() {
+    currentFilter = this.value;
+    update();
+  });
+
+  d3.select("#sortCount").on("click", function() {
+    currentSort = "count";
+    update();
+  });
+
+  d3.select("#sortDamage").on("click", function() {
+    currentSort = "damage";
+    update();
+  });
+
+  d3.select("#resetBtn").on("click", function() {
+    currentFilter = "All";
+    currentSort   = "alpha";
+    highlighted   = null;
+    d3.select("#seasonFilter").property("value", "All");
+    update();
+  });
+}
+
+// ================================
+// Main update
+// ================================
+
+function update() {
+
+  // Filter
+  var filtered = currentFilter === "All"
+    ? allData
+    : allData.filter(function(d) { return d.SEASON === currentFilter; });
+
+  var summary = buildSummary(filtered);
+
+  // Sort
+  if (currentSort === "count") {
+    summary.sort(function(a, b) { return b.count - a.count; });
+  } else if (currentSort === "damage") {
+    summary.sort(function(a, b) { return b.damage - a.damage; });
+  } else {
+    summary.sort(function(a, b) { return d3.ascending(a.type, b.type); });
+  }
+
+  var types = summary.map(function(d) { return d.type; });
+
+  // Update domains
+  xCount.domain(types);
+  yCount.domain([0, d3.max(summary, function(d) { return d.count; })]);
+
+  xDamage.domain(types);
+  yDamage.domain([0, d3.max(summary, function(d) { return d.damage; })]);
+
+  // Update axes
+  xAxisCountGroup.call(xAxisCount)
+    .selectAll("text")
+    .style("text-anchor", "end")
+    .attr("dx", "-0.6em")
+    .attr("dy", "0.15em")
+    .attr("transform", "rotate(-40)");
+
+  yAxisCountGroup.call(yAxisCount);
+
+  xAxisDamageGroup.call(xAxisDamage)
+    .selectAll("text")
+    .style("text-anchor", "end")
+    .attr("dx", "-0.6em")
+    .attr("dy", "0.15em")
+    .attr("transform", "rotate(-40)");
+
+  yAxisDamageGroup.call(yAxisDamage);
+
+  // ========================
+  // Count bars
+  // ========================
+
+  var countBars = svgCount.selectAll(".bar").data(summary, function(d) { return d.type; });
+
+  countBars.enter()
+    .append("rect")
+    .attr("class", "bar");
+
+  countBars
+    .attr("x",      function(d) { return xCount(d.type); })
+    .attr("y",      function(d) { return yCount(d.count); })
+    .attr("width",  xCount.rangeBand())
+    .attr("height", function(d) { return height - yCount(d.count); })
+    .classed("highlighted", function(d) { return d.type === highlighted; })
+    .classed("dimmed",       function(d) { return highlighted !== null && d.type !== highlighted; })
+    .on("mouseover", function(d) {
+      highlighted = d.type;
+      showTooltip(d);
+      refreshHighlight();
+    })
+    .on("mousemove", function() {
+      moveTooltip();
+    })
+    .on("mouseout", function() {
+      highlighted = null;
+      hideTooltip();
+      refreshHighlight();
+    });
+
+  countBars.exit().remove();
+
+  // ========================
+  // Damage bars
+  // ========================
+
+  var damageBars = svgDamage.selectAll(".bar").data(summary, function(d) { return d.type; });
+
+  damageBars.enter()
+    .append("rect")
+    .attr("class", "bar");
+
+  damageBars
+    .attr("x",      function(d) { return xDamage(d.type); })
+    .attr("y",      function(d) { return yDamage(d.damage); })
+    .attr("width",  xDamage.rangeBand())
+    .attr("height", function(d) { return height - yDamage(d.damage); })
+    .classed("highlighted", function(d) { return d.type === highlighted; })
+    .classed("dimmed",       function(d) { return highlighted !== null && d.type !== highlighted; })
+    .on("mouseover", function(d) {
+      highlighted = d.type;
+      showTooltip(d);
+      refreshHighlight();
+    })
+    .on("mousemove", function() {
+      moveTooltip();
+    })
+    .on("mouseout", function() {
+      highlighted = null;
+      hideTooltip();
+      refreshHighlight();
+    });
+
+  damageBars.exit().remove();
+}
+
+// ================================
+// Highlight sync helper
+// ================================
+
+function refreshHighlight() {
+  svgCount.selectAll(".bar")
+    .classed("highlighted", function(d) { return d.type === highlighted; })
+    .classed("dimmed",       function(d) { return highlighted !== null && d.type !== highlighted; });
+
+  svgDamage.selectAll(".bar")
+    .classed("highlighted", function(d) { return d.type === highlighted; })
+    .classed("dimmed",       function(d) { return highlighted !== null && d.type !== highlighted; });
+}
+
+// ================================
+// Tooltip helpers
+// ================================
+
+function showTooltip(d) {
+  tooltip
+    .style("display", "block")
+    .html(
+      "<strong>" + d.type + "</strong><br>" +
+      "Events: " + d.count.toLocaleString() + "<br>" +
+      "Damage: $" + d.damage.toFixed(2) + "M"
+    );
+}
+
+function moveTooltip() {
+  tooltip
+    .style("left", (d3.event.clientX + 14) + "px")
+    .style("top",  (d3.event.clientY - 28) + "px");
+}
+
+function hideTooltip() {
+  tooltip.style("display", "none");
+}
+
+</script>
+</body>
+</html>
